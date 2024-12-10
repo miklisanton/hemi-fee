@@ -12,10 +12,6 @@ import (
 	"time"
 )
 
-type StatsResponse struct {
-    Histogram [][]int `json:"fee_histogram"`
-}
-
 func main() {
     if len(os.Args) != 2 {
         log.Fatalf("Usage: %s <path-to-service-config>", os.Args[0])
@@ -76,7 +72,7 @@ func replaceEnvVar(name string, value string, path string) {
 }
 
 func fetchFee() string {
-    resp, err := http.Get("https://blockstream.info/testnet/api/mempool")
+    resp, err := http.Get("https://blockstream.info/testnet/api/fee-estimates")
     if err != nil {
         log.Fatalf("Error fetching fee: %s", err)
     }
@@ -86,14 +82,15 @@ func fetchFee() string {
         log.Fatalf("Error fetching fee: %s", resp.Status)
     }
     
-    var stats StatsResponse
-    
+    var stats map[string]float64
+
     err = json.NewDecoder(resp.Body).Decode(&stats)
     if err != nil {
         log.Fatalf("Error decoding response: %s", err)
     }
 
-    return fmt.Sprintf("%d", stats.Histogram[0][0])
+    avg := int((stats["1"] + stats["25"]) / 2)
+    return fmt.Sprintf("%d", avg)
 }
 
 
