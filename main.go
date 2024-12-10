@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -20,32 +21,33 @@ func main() {
         log.Fatalf("Usage: %s <path-to-service-config>", os.Args[0])
     }
     path := os.Args[1]
+    log.Printf("Path to service config: %s", path)
     splitted := strings.Split(path, "/")
     name := splitted[len(splitted)-1]
+    log.Printf("Service name: %s", name)
+
 
     for {
         // Get current fee
         fee := fetchFee()
         log.Printf("Current fee: %s", fee)
         // Replace fee in config file
-        replaceEnvVar("POPM_STATIC_FEE", "2000", path)        
+        replaceEnvVar("POPM_STATIC_FEE", fee, path)        
         // Restart daemon
-        out, err := exec.Command("systemctl", "daemon-reload").Output()
-        log.Printf("Output: %s", out)
+        _, err := exec.Command("systemctl", "daemon-reload").Output()
         if err != nil {
             log.Fatalf("Error restarting daemon: %s", err)
         }
         // Restart service
-        out, err = exec.Command("systemctl", "restart", name).Output()
+        _, err = exec.Command("systemctl", "restart", name).Output()
         if err != nil {
             log.Fatalf("Error restarting service: %s", err)
         }
-        log.Printf("Output: %s", out)
-
         time.Sleep(1 * time.Minute)
     }
 
 }
+
 
 func replaceEnvVar(name string, value string, path string) {
     // Read file    
@@ -57,14 +59,20 @@ func replaceEnvVar(name string, value string, path string) {
     // Replace env var
     envVarPattern := fmt.Sprintf(`Environment="%s=.*"`, name)
     newEnvVar := fmt.Sprintf(`Environment="%s=%s"`, name, value)
-    newContent := strings.Replace(content, envVarPattern, newEnvVar, 1)
-    // Write file
-    err = os.WriteFile(path, []byte(newContent), 0644)
-    if err != nil {
-        log.Fatalf("Error writing file: %s", err)
+    re := regexp.MustCompile(envVarPattern)
+    if re.MatchString(content) {
+        newContent := re.ReplaceAllString(content, newEnvVar)
+        // Write file
+        err = os.WriteFile(path, []byte(newContent), 0644)
+        if err != nil {
+            log.Fatalf("Error writing file: %s", err)
+        }
+
+        log.Printf("Replaced env var %s with value %s", name, value)
+    } else {
+        log.Fatalf("Env var %s not found in file", name)
     }
 
-    log.Printf("Replaced env var %s with value %s", name, value)
 }
 
 func fetchFee() string {
